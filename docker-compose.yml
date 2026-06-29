@@ -7,6 +7,12 @@
 #
 # ВАЖНО: только Linux-хост, network_mode: host (нужно и для Spotify Connect zeroconf,
 # и для обнаружения HomePod/Google по mDNS).
+#
+# mDNS: на host-сети должен быть РОВНО ОДИН avahi-daemon. У Linux-хоста он уже есть,
+# поэтому оба контейнера (owntone и shairport) используют avahi ХОСТА через его
+# system D-Bus (bind /run/dbus) и СВОЙ avahi не поднимают. Иначе несколько avahi
+# дерутся за имя хоста (nettop → nettop-2 → … → nettop-298), записи _raop/_daap
+# «прыгают», и iPad «не удаётся подключиться к spotineck».
 
 services:
   owntone:
@@ -14,12 +20,18 @@ services:
     image: andrewkomkov/owntone:29.2       # опубликован в Docker Hub
     container_name: spotineck-owntone
     network_mode: host
+    # docker-default AppArmor блокирует обращение контейнера к system D-Bus хоста
+    # (DENIED dbus_method_call Hello) → mDNS init failed. Снимаем профиль: контейнер
+    # и так host-network аудио-приёмник, ему нужен avahi хоста.
+    security_opt:
+      - apparmor=unconfined
     environment:
       - TZ=Europe/Moscow
     volumes:
       - ./config/owntone.conf:/etc/owntone.conf:ro   # деплой-конфиг (ALSA nettop + pipe)
       - ./pipe:/music                                 # библиотека = общий pipe /music/spotify
       - owntone-data:/var/cache/owntone               # бд/кэш OwnTone
+      - /run/dbus:/run/dbus                           # system D-Bus хоста → mDNS через единый avahi хоста
     devices:
       - /dev/snd:/dev/snd                  # локальные динамики nettop (ALSA)
     group_add:
@@ -38,14 +50,21 @@ services:
     restart: unless-stopped
 
   shairport:
-    image: mikebrady/shairport-sync:classic  # AirPlay 1 приёмник (без nqptp — надёжно в Docker)
+    build: ./shairport                      # свой образ: Shairport Sync 5.0.4 classic из исходников
+    image: andrewkomkov/spotineck-shairport:5.0.4  # AirPlay 1 приёмник (без nqptp — надёжно в Docker)
     container_name: spotineck-shairport
     network_mode: host
+    # см. owntone: нужен доступ к avahi хоста через system D-Bus, снимаем apparmor.
+    security_opt:
+      - apparmor=unconfined
     cap_add:
       - SYS_NICE
     volumes:
       - ./config/shairport-sync.conf:/etc/shairport-sync.conf:ro
       - ./pipe:/music                         # пишет PCM в /music/airplay (читает OwnTone)
+      - /run/dbus:/run/dbus                   # публикуем AirPlay через avahi ХОСТА (один avahi на host-сеть)
+    depends_on:
+      - owntone
     restart: unless-stopped
 
   api:

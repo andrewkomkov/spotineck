@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#000000" />
+  <title>spotineck — one synchronized zone out of every speaker you own</title>
+  <meta name="description" content="Spotineck turns HomePod (AirPlay), Google Home / Nest, any Chromecast and your host's local audio into one synchronized zone you can stream to from Spotify and any Apple device." />
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="spotineck" />
+  <meta property="og:description" content="A universal, synchronized multi-room zone out of speakers from different ecosystems — Spotify + AirPlay to all of them at once." />
+  <meta property="og:type" content="website" />
+
+  <link rel="icon" href="icon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="bg-glow"></div>
+
+  <header class="nav">
+    <a class="brand" href="#top"><span class="logo">◎</span> spotineck</a>
+    <nav class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#how">How it works</a>
+      <a href="#api">API</a>
+      <a class="gh" href="https://github.com/andrewkomkov/spotineck" target="_blank" rel="noopener">GitHub ↗</a>
+    </nav>
+  </header>
+
+  <main id="top">
+    <!-- HERO -->
+    <section class="hero">
+      <div class="hero-icon">◎</div>
+      <h1>One synchronized zone out of <span class="grad">every speaker</span> you own.</h1>
+      <p class="lead">
+        Spotineck turns a pile of incompatible speakers — <strong>HomePod</strong> (AirPlay),
+        <strong>Google Home / Nest</strong> and any <strong>Chromecast</strong>, plus your host's
+        local audio — into <strong>one synchronized zone</strong>. Stream to it from
+        <strong>Spotify</strong> and from <strong>any Apple device</strong> over AirPlay.
+      </p>
+      <div class="cta">
+        <a class="btn primary" href="https://github.com/andrewkomkov/spotineck" target="_blank" rel="noopener">View on GitHub</a>
+        <a class="btn ghost" href="#quickstart">Quick start</a>
+      </div>
+      <p class="why">
+        HomePod, Alexa/Echo, Google Home and Chromecast live in three incompatible multi-room
+        protocols and don't combine into one group out of the box. Spotineck is the bridge:
+        one input → a synchronized fan-out to every speaker at once.
+      </p>
+    </section>
+
+    <!-- DIAGRAM -->
+    <section class="diagram-wrap">
+      <pre class="diagram">
+                            ┌──────────────── nettop (Linux + Docker) ───────────────┐
+ Spotify (any device) ─────►│ librespot ─┐                                            │
+                            │            ├─► OwnTone ─┬─► AirPlay 2 ─► HomePod         │
+ iPhone/iPad/Mac (AirPlay)─►│ shairport ─┘            ├─► Chromecast ─► Google / TV    │
+                            │   (pipe sources)        └─► ALSA ───────► host speakers  │
+ Browser / Agent ──HTTP/WS─►│ spotineck-api (REST + WebSocket + web UI)               │
+                            └────────────────────────────────────────────────────────┘</pre>
+    </section>
+
+    <!-- FEATURES -->
+    <section id="features" class="section">
+      <h2>What it does</h2>
+      <div class="grid">
+        <div class="card">
+          <div class="ic">🔊</div>
+          <h3>Synchronized zone</h3>
+          <p>AirPlay 2 (HomePod) + Chromecast (Google/TV) + local ALSA, all playing in lockstep.</p>
+        </div>
+        <div class="card">
+          <div class="ic">🎚</div>
+          <h3>Per-speaker delay</h3>
+          <p>Volume and delay (offset) per speaker, right in the UI — fix cross-protocol drift by ear, at runtime, no restart.</p>
+        </div>
+        <div class="card">
+          <div class="ic">🟢</div>
+          <h3>Spotify Connect</h3>
+          <p>The zone shows up as a "spotineck" device in the Spotify app. Pick it and hit play.</p>
+        </div>
+        <div class="card">
+          <div class="ic">﹫</div>
+          <h3>AirPlay receiver</h3>
+          <p>Any audio from Apple — not just Spotify — fans out to the whole group, Chromecast included.</p>
+        </div>
+        <div class="card">
+          <div class="ic">🎛</div>
+          <h3>Spotify Web API</h3>
+          <p>Start music from the UI or an agent without a phone, with rich metadata and catalog search.</p>
+        </div>
+        <div class="card">
+          <div class="ic">🤖</div>
+          <h3>Agent-friendly API</h3>
+          <p>Clean REST + OpenAPI (<code>/docs</code>, <code>/openapi.json</code>) + a WebSocket for real-time state.</p>
+        </div>
+        <div class="card">
+          <div class="ic">📱</div>
+          <h3>Web interface</h3>
+          <p>A polished, Spotify-style, mobile-friendly UI — installable as a PWA.</p>
+        </div>
+        <div class="card">
+          <div class="ic">🔐</div>
+          <h3>AirPlay PIN auth</h3>
+          <p>Authorize PIN-protected AirPlay speakers right from the interface, and rename the device on the fly.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- HOW IT WORKS -->
+    <section id="how" class="section">
+      <h2>How it works</h2>
+      <p class="section-lead">
+        Spotineck doesn't reinvent the multi-room engine — it uses
+        <a href="https://github.com/owntone/owntone-server" target="_blank" rel="noopener">OwnTone</a>,
+        a synchronized AirPlay 2 / Chromecast player. Each input is a small service that writes PCM
+        into a named pipe; OwnTone reads it as a source and synchronously feeds every enabled output.
+      </p>
+      <div class="table">
+        <div class="trow head"><span>Service</span><span>What it does</span></div>
+        <div class="trow"><span><b>owntone</b></span><span>The core: reads pipe sources, synchronously fans out to AirPlay 2 / Chromecast / ALSA. Exposes a REST+WS API.</span></div>
+        <div class="trow"><span><b>librespot</b></span><span>Spotify Connect endpoint → writes to <code>/music/spotify</code>. Device name comes from a file (changed from the UI).</span></div>
+        <div class="trow"><span><b>shairport</b></span><span>AirPlay 1 receiver → writes to <code>/music/airplay</code>. Publishes mDNS through the single shared avahi.</span></div>
+        <div class="trow"><span><b>api</b></span><span>FastAPI: smooths the OwnTone API into clean REST/WS, adds the Spotify Web API, renaming, and serves the web UI.</span></div>
+      </div>
+    </section>
+
+    <!-- QUICK START -->
+    <section id="quickstart" class="section">
+      <h2>Quick start</h2>
+      <p class="section-lead">Linux host with Docker + docker compose. Speakers and host on the same network/VLAN.</p>
+      <pre class="code"><span class="c"># clone, set up FIFOs/config/.env, build &amp; run</span>
+git clone https://github.com/andrewkomkov/spotineck.git
+cd spotineck
+make setup
+make up</pre>
+      <ol class="steps">
+        <li>Open <code>http://&lt;host&gt;:8080</code> — the web interface.</li>
+        <li>In the <strong>Spotify</strong> app pick the <strong>spotineck</strong> device and hit play.</li>
+        <li>In the <strong>Speakers</strong> tab, enable the speakers you want — playback starts in sync.</li>
+        <li>Audio from Apple: pick <strong>spotineck</strong> in the <strong>AirPlay</strong> menu.</li>
+      </ol>
+    </section>
+
+    <!-- API -->
+    <section id="api" class="section">
+      <h2>API for agents &amp; integrations</h2>
+      <p class="section-lead">Clean REST with an OpenAPI schema at <code>/docs</code> and <code>/openapi.json</code>. Quick summary — <code>GET /api/capabilities</code>.</p>
+      <div class="table api">
+        <div class="trow head"><span>Method</span><span>Purpose</span></div>
+        <div class="trow"><span><code>GET /api/state</code></span><span>full snapshot: playback + speakers + queue</span></div>
+        <div class="trow"><span><code>POST /api/playback/{play,pause,toggle,next,previous}</code></span><span>transport</span></div>
+        <div class="trow"><span><code>POST /api/playback/volume</code></span><span>zone volume</span></div>
+        <div class="trow"><span><code>POST /api/speakers/{id}</code></span><span>into the group / volume / delay</span></div>
+        <div class="trow"><span><code>PUT /api/speakers/group</code></span><span>set the whole group membership at once</span></div>
+        <div class="trow"><span><code>GET/POST /api/device-name</code></span><span>name in Spotify Connect</span></div>
+        <div class="trow"><span><code>WS /ws</code></span><span>real-time state push</span></div>
+      </div>
+    </section>
+
+    <!-- LIMITATIONS -->
+    <section class="section">
+      <h2>Limitations (honestly)</h2>
+      <ul class="limits">
+        <li><strong>A Chromecast receiver is impossible.</strong> The Google Cast protocol is closed on the receiver side — there's no open way to "pretend to be a Chromecast" (unlike AirPlay). For Android: Spotify Connect, AirPlay from a Mac, or DLNA/UPnP (planned).</li>
+        <li><strong>TV-Chromecast with a large buffer</strong> (often &gt;2 s) is hard to align perfectly — OwnTone caps the offset at ±2000 ms. Small, stable AirPlay↔Cast drift the delay slider removes nicely.</li>
+        <li><strong>Echo/Alexa</strong> can't join the synchronized group (no AirPlay/Cast/stream receiver).</li>
+      </ul>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="foot-inner">
+      <span class="brand"><span class="logo">◎</span> spotineck</span>
+      <span class="muted">
+        Built on
+        <a href="https://github.com/owntone/owntone-server" target="_blank" rel="noopener">OwnTone</a>,
+        <a href="https://github.com/librespot-org/librespot" target="_blank" rel="noopener">librespot</a> and
+        <a href="https://github.com/mikebrady/shairport-sync" target="_blank" rel="noopener">shairport-sync</a>.
+        MIT licensed.
+      </span>
+      <a class="gh" href="https://github.com/andrewkomkov/spotineck" target="_blank" rel="noopener">GitHub ↗</a>
+    </div>
+  </footer>
+</body>
+</html>

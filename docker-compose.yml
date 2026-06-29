@@ -1,0 +1,72 @@
+# spotineck — Spotify Connect эндпоинт + синхрон на HomePod (AirPlay2) и Google Home (Cast)
+#
+# Сервисы:
+#   librespot — свежий rust-librespot = Spotify Connect устройство "spotineck", пишет PCM в pipe
+#   owntone   — linuxserver/daapd: читает pipe и синхронно раздаёт на AirPlay2/Chromecast/ALSA
+#   api       — agent-friendly REST/WS поверх OwnTone (+ отдаёт web в стиле Spotify)
+#
+# ВАЖНО: только Linux-хост, network_mode: host (нужно и для Spotify Connect zeroconf,
+# и для обнаружения HomePod/Google по mDNS).
+
+services:
+  owntone:
+    build: ./owntone                       # свой образ: OwnTone 29.2 из исходников (AirPlay2 + Cast + offset)
+    image: andrewkomkov/owntone:29.2       # опубликован в Docker Hub
+    container_name: spotineck-owntone
+    network_mode: host
+    environment:
+      - TZ=Europe/Moscow
+    volumes:
+      - ./config/owntone.conf:/etc/owntone.conf:ro   # деплой-конфиг (ALSA nettop + pipe)
+      - ./pipe:/music                                 # библиотека = общий pipe /music/spotify
+      - owntone-data:/var/cache/owntone               # бд/кэш OwnTone
+    devices:
+      - /dev/snd:/dev/snd                  # локальные динамики nettop (ALSA)
+    group_add:
+      - "29"                               # gid audio на хосте — доступ к /dev/snd
+    restart: unless-stopped
+
+  librespot:
+    build: ./librespot                     # обёртка над giof71/librespot: имя из файла /config/device_name
+    image: andrewkomkov/spotineck-librespot:latest
+    container_name: spotineck-librespot
+    network_mode: host
+    volumes:
+      - ./pipe:/music                      # пишем в тот же pipe, что читает OwnTone
+      - ./config:/config                   # device_name (имя в Spotify Connect)
+      - librespot-cache:/cache
+    restart: unless-stopped
+
+  shairport:
+    image: mikebrady/shairport-sync:classic  # AirPlay 1 приёмник (без nqptp — надёжно в Docker)
+    container_name: spotineck-shairport
+    network_mode: host
+    cap_add:
+      - SYS_NICE
+    volumes:
+      - ./config/shairport-sync.conf:/etc/shairport-sync.conf:ro
+      - ./pipe:/music                         # пишет PCM в /music/airplay (читает OwnTone)
+    restart: unless-stopped
+
+  api:
+    build: ./api
+    container_name: spotineck-api
+    network_mode: host
+    environment:
+      - OWNTONE_URL=http://127.0.0.1:3689
+      - SPOTINECK_PORT=8080
+      - SPOTIFY_REDIRECT_URI=http://127.0.0.1:8080/api/spotify/callback
+      - SPOTIFY_TOKEN_PATH=/data/spotify_token.json
+    env_file:
+      - .env            # SPOTIFY_CLIENT_ID / SPOTIFY_CLIENT_SECRET (не в git)
+    volumes:
+      - ./api-data:/data                        # OAuth-токен Spotify
+      - ./config:/cfg                           # device_name (имя устройства)
+      - /var/run/docker.sock:/var/run/docker.sock  # рестарт librespot при смене имени
+    depends_on:
+      - owntone
+    restart: unless-stopped
+
+volumes:
+  librespot-cache:
+  owntone-data:

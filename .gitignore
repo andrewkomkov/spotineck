@@ -1,0 +1,13 @@
+# секреты и рантайм-данные
+.env
+api-data/
+owntone-config/
+config/device_name
+
+# FIFO и локальная музыка
+pipe/
+music/
+
+# прочее
+*.log
+.DS_Store

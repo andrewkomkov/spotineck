@@ -5,20 +5,35 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#000000" />
   <title>spotineck</title>
+
+  <!-- PWA: установка на домашний экран (Android/iOS) -->
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="spotineck" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="icon" href="/icon-192.png" type="image/png" />
+
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
+  <!-- амбиентный фон из обложки -->
+  <div id="ambient"></div>
+
   <div id="app">
     <!-- Sidebar (desktop) -->
     <aside class="sidebar">
       <div class="brand"><span class="logo">◎</span> spotineck</div>
       <nav class="nav">
-        <button class="nav-item active" data-view="speakers"><span class="ic">⧉</span> Колонки</button>
-        <button class="nav-item" data-view="queue"><span class="ic">≣</span> Очередь</button>
+        <button class="nav-item active" data-view="now"><span class="ic">♪</span> Сейчас</button>
         <button class="nav-item" data-view="search"><span class="ic">⌕</span> Поиск</button>
+        <button class="nav-item" data-view="speakers"><span class="ic">⧉</span> Колонки</button>
+        <button class="nav-item" data-view="queue"><span class="ic">≣</span> Очередь</button>
         <button class="nav-item" data-view="settings"><span class="ic">⚙</span> Настройки</button>
       </nav>
       <div class="sidebar-foot">
+        <div id="zone-summary" class="zone-summary muted"></div>
         <div class="conn"><span class="dot" id="conn-dot"></span><span id="conn-text">подключение…</span></div>
         <a href="/docs" target="_blank" class="apilink">API · /docs</a>
       </div>
@@ -26,36 +41,100 @@
 
     <!-- Main -->
     <main class="main">
-      <!-- Speakers -->
-      <section class="view" id="view-speakers">
+      <!-- NOW PLAYING (hero) -->
+      <section class="view" id="view-now">
+        <div class="now-hero">
+          <div class="now-art-wrap">
+            <img id="hero-art" class="now-art" alt="" />
+            <div id="hero-art-ph" class="now-art ph">◎</div>
+          </div>
+          <div class="now-info">
+            <div id="hero-source" class="now-source">spotineck</div>
+            <h1 id="hero-title" class="now-title">Ничего не играет</h1>
+            <div id="hero-artist" class="now-artist muted"></div>
+            <div id="hero-album" class="now-album muted"></div>
+
+            <div class="now-seek">
+              <span id="h-cur" class="t">0:00</span>
+              <div class="bar lg" id="hero-seek"><div class="bar-buf"></div><div class="bar-fill" id="hero-fill"></div><div class="bar-knob"></div></div>
+              <span id="h-len" class="t">0:00</span>
+            </div>
+
+            <div class="now-controls">
+              <button id="h-shuffle" class="ctl" title="Перемешать (S)">⤮</button>
+              <button id="h-prev" class="ctl" title="Назад (←)">⏮</button>
+              <button id="h-play" class="ctl play lg" title="Play/Pause (Пробел)">▶</button>
+              <button id="h-next" class="ctl" title="Вперёд (→)">⏭</button>
+              <button id="h-repeat" class="ctl" title="Повтор (R)">↻</button>
+            </div>
+
+            <div class="now-zone">
+              <div class="now-zone-head">
+                <span class="muted">Играет в зоне</span>
+                <button id="h-playhere" class="chip ghost hidden" title="Перенести Spotify на spotineck">↘ Играть здесь</button>
+              </div>
+              <div id="now-chips" class="now-chips"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SEARCH -->
+      <section class="view hidden" id="view-search">
+        <header class="view-head"><h1>Поиск</h1></header>
+        <div class="search-bar">
+          <span class="search-ic">⌕</span>
+          <input id="search-input" class="search-box" placeholder="Трек, артист, альбом, плейлист…" autocomplete="off" />
+          <button id="search-clear" class="search-x hidden">✕</button>
+        </div>
+        <div class="seg" id="search-seg">
+          <button class="seg-item active" data-type="track">Треки</button>
+          <button class="seg-item" data-type="album">Альбомы</button>
+          <button class="seg-item" data-type="artist">Артисты</button>
+          <button class="seg-item" data-type="playlist">Плейлисты</button>
+        </div>
+        <div id="search-results" class="result-list"></div>
+        <p class="muted hint" id="search-hint">Полный каталог Spotify. Нажми на результат — заиграет на всей группе.</p>
+      </section>
+
+      <!-- SPEAKERS -->
+      <section class="view hidden" id="view-speakers">
         <header class="view-head">
-          <h1>Группа колонок</h1>
-          <p class="muted">Включённые играют синхронно одну зону. Это и есть spotineck.</p>
+          <h1>Зона</h1>
+          <p class="muted">Включённые колонки играют синхронно. Это и есть spotineck.</p>
         </header>
+        <div class="master-vol card">
+          <span class="vic">🔊</span>
+          <input type="range" id="master-vol" class="vol-range lg" min="0" max="100" value="0" />
+          <span id="master-vol-val" class="vol-num">0</span>
+        </div>
         <div class="speakers-actions">
           <button id="btn-all-on" class="chip">Включить все</button>
           <button id="btn-all-off" class="chip">Выключить все</button>
+          <button id="btn-only-local" class="chip">Только nettop</button>
         </div>
         <div id="speakers-list" class="speakers-grid"></div>
       </section>
 
-      <!-- Queue -->
+      <!-- QUEUE -->
       <section class="view hidden" id="view-queue">
         <header class="view-head"><h1>Очередь</h1><button id="btn-clear-queue" class="chip">Очистить</button></header>
-        <div id="queue-list" class="track-list"></div>
+        <div id="queue-list" class="result-list"></div>
       </section>
 
-      <!-- Search -->
-      <section class="view hidden" id="view-search">
-        <header class="view-head"><h1>Поиск</h1></header>
-        <input id="search-input" class="search-box" placeholder="Трек, артист, альбом…" />
-        <div id="search-results" class="track-list"></div>
-        <p class="muted hint">Поиск по библиотеке OwnTone и Spotify (если выполнен вход).</p>
-      </section>
-
-      <!-- Settings -->
+      <!-- SETTINGS -->
       <section class="view hidden" id="view-settings">
         <header class="view-head"><h1>Настройки</h1></header>
+
+        <div class="card">
+          <div class="card-title">Spotify</div>
+          <div class="kv"><span class="muted">Подключение</span><span id="sp-status" class="badge">—</span></div>
+          <div class="setting-row" style="margin-top:12px">
+            <button id="sp-login" class="btn-primary hidden">Войти в Spotify</button>
+            <button id="sp-playhere" class="chip hidden">Играть на spotineck</button>
+          </div>
+          <p class="muted hint" id="sp-hint">Полный каталог, запуск из UI и богатые метаданные.</p>
+        </div>
 
         <div class="card">
           <div class="card-title">Имя устройства в Spotify Connect</div>
@@ -72,15 +151,16 @@
         <div class="card">
           <div class="card-title">Состояние</div>
           <div class="kv"><span class="muted">Соединение</span><span id="set-conn">—</span></div>
+          <div class="kv"><span class="muted">Колонок в зоне</span><span id="set-zone">—</span></div>
           <div class="kv"><span class="muted">API</span><a href="/docs" target="_blank" class="apilink">/docs · OpenAPI</a></div>
         </div>
       </section>
     </main>
   </div>
 
-  <!-- Now playing -->
+  <!-- Now playing bar -->
   <footer class="nowbar">
-    <div class="np-track">
+    <div class="np-track" id="np-open">
       <img id="np-art" class="np-art" alt="" />
       <div class="np-meta">
         <div id="np-title" class="np-title">—</div>
@@ -97,23 +177,27 @@
       </div>
       <div class="np-seek">
         <span id="t-cur" class="t">0:00</span>
-        <div class="bar" id="seek-bar"><div class="bar-fill" id="seek-fill"></div></div>
+        <div class="bar" id="seek-bar"><div class="bar-fill" id="seek-fill"></div><div class="bar-knob"></div></div>
         <span id="t-len" class="t">0:00</span>
       </div>
     </div>
     <div class="np-right">
-      <span class="vol-ic">🔊</span>
-      <div class="bar vol" id="vol-bar"><div class="bar-fill" id="vol-fill"></div></div>
+      <button id="vol-mute" class="vol-ic" title="Без звука">🔊</button>
+      <div class="bar vol" id="vol-bar"><div class="bar-fill" id="vol-fill"></div><div class="bar-knob"></div></div>
     </div>
   </footer>
 
   <!-- Bottom nav (mobile) -->
   <nav class="mobile-nav">
-    <button class="mnav-item active" data-view="speakers"><span class="ic">⧉</span><span>Колонки</span></button>
-    <button class="mnav-item" data-view="queue"><span class="ic">≣</span><span>Очередь</span></button>
+    <button class="mnav-item active" data-view="now"><span class="ic">♪</span><span>Сейчас</span></button>
     <button class="mnav-item" data-view="search"><span class="ic">⌕</span><span>Поиск</span></button>
+    <button class="mnav-item" data-view="speakers"><span class="ic">⧉</span><span>Колонки</span></button>
+    <button class="mnav-item" data-view="queue"><span class="ic">≣</span><span>Очередь</span></button>
     <button class="mnav-item" data-view="settings"><span class="ic">⚙</span><span>Ещё</span></button>
   </nav>
+
+  <!-- toasts -->
+  <div id="toasts"></div>
 
   <script src="/app.js"></script>
 </body>

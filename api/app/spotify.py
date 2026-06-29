@@ -200,6 +200,22 @@ async def play(body: PlayBody):
     return {"ok": True}
 
 
+class QueueBody(BaseModel):
+    uri: str  # spotify:track:... — что добавить в очередь воспроизведения
+
+
+@router.post("/queue", summary="Добавить трек в очередь Spotify (играет на spotineck)")
+async def queue(body: QueueBody):
+    dev = await _find_device()
+    params = {"uri": body.uri}
+    if dev:
+        params["device_id"] = dev["id"]
+    r = await _sp("POST", "/me/player/queue", params=params)
+    if r.status_code not in (200, 202, 204):
+        raise HTTPException(r.status_code, r.text)
+    return {"ok": True}
+
+
 async def get_now_playing() -> dict | None:
     """Нормализованные метаданные текущего трека из Spotify, или None если не играет/не авторизован.
     Кэшируется на _NP_TTL сек, чтобы не долбить Spotify API на каждое WS-событие."""
@@ -244,7 +260,9 @@ async def now_playing():
 
 
 @router.get("/search", summary="Поиск по полному каталогу Spotify")
-async def search(q: str, type: str = "track,artist,album,playlist", limit: int = 20):
+async def search(q: str, type: str = "track,artist,album,playlist", limit: int = 10):
+    # dev-режим приложения Spotify капает limit поиска на 10 (≥12 → "Invalid limit")
+    limit = max(1, min(limit, 10))
     r = await _sp("GET", "/search", params={"q": q, "type": type, "limit": limit})
     if r.status_code != 200:
         raise HTTPException(r.status_code, r.text)

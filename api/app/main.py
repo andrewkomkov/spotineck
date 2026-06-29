@@ -10,9 +10,14 @@ OwnTone отдаёт богатый, но низкоуровневый REST+WS A
 """
 import asyncio
 import json
+import mimetypes
 import os
 from contextlib import asynccontextmanager
 from typing import Any
+
+# веб-манифест PWA должен отдаваться с правильным MIME, иначе Chrome на Android
+# не предложит установку. StaticFiles берёт тип из mimetypes — доучиваем его.
+mimetypes.add_type("application/manifest+json", ".webmanifest")
 
 import httpx
 import websockets

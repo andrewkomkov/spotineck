@@ -1,20 +1,20 @@
 #!/bin/sh
 set -e
 
-# Свой avahi/dbus НЕ поднимаем — на host-сети должен быть один avahi (хостовый),
-# иначе конфликт имени хоста роняет запись _raop._tcp и iPad «не удаётся
-# подключиться к spotineck». Публикуем AirPlay через avahi хоста по его system
-# D-Bus (/run/dbus примонтирован с хоста). Ждём, пока сокет доступен.
+# Do NOT start our own avahi/dbus — the host network must have one avahi (the host's),
+# otherwise a host-name conflict drops the _raop._tcp record and the iPad "can't
+# connect to spotineck". Publish AirPlay through the host's avahi over its system
+# D-Bus (/run/dbus is mounted from the host). Wait until the socket is available.
 i=0
 while [ ! -S /run/dbus/system_bus_socket ]; do
     i=$((i + 1))
     if [ "$i" -gt 60 ]; then
-        echo "shairport: system D-Bus (/run/dbus) не появился за 60с — стартуем как есть" >&2
+        echo "shairport: host system D-Bus (/run/dbus) did not appear in 60s — starting anyway" >&2
         break
     fi
-    echo "shairport: жду system D-Bus хоста (/run/dbus)…"
+    echo "shairport: waiting for the host system D-Bus (/run/dbus)…"
     sleep 1
 done
 
-echo "shairport: D-Bus готов, запускаю shairport-sync (mDNS через avahi хоста)"
+echo "shairport: D-Bus ready, starting shairport-sync (mDNS via the host avahi)"
 exec shairport-sync -c /etc/shairport-sync.conf

@@ -23,9 +23,9 @@ html, body {
   overscroll-behavior: none;
 }
 
-/* амбиентный фон — размытая обложка текущего трека.
-   blur держим умеренным: большой radius на весь экран + backdrop-filter'ы сверху
-   душат рендер (особенно на телефоне-PWA). 40px достаточно для мягкого пятна. */
+/* ambient background — the blurred artwork of the current track.
+   keep the blur moderate: a large full-screen radius + backdrop-filters on top
+   choke rendering (especially in the phone PWA). 40px is enough for a soft blob. */
 #ambient {
   position: fixed; inset: 0; z-index: -1;
   background-size: cover; background-position: center;

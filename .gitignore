@@ -1,13 +1,13 @@
-# секреты и рантайм-данные
+# secrets and runtime data
 .env
 api-data/
 owntone-config/
 config/device_name
 
-# FIFO и локальная музыка
+# FIFOs and local music
 pipe/
 music/
 
-# прочее
+# misc
 *.log
 .DS_Store

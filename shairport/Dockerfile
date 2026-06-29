@@ -1,16 +1,17 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# spotineck/shairport — Shairport Sync (классический AirPlay 1) из исходников.
-# Multi-stage: тяжёлый билд выкидывается, в финал едут только бинарь + рантайм-либы.
-# Классический AirPlay 1 (без --with-airplay-2): RSA/AES через openssl, без nqptp/PTP
-# — надёжно в Docker. ALAC декодируется встроенным декодером (ffmpeg не тянем).
+# spotineck/shairport — Shairport Sync (classic AirPlay 1) from source.
+# Multi-stage: the heavy build is thrown away, only the binary + runtime libs make
+# it into the final image. Classic AirPlay 1 (no --with-airplay-2): RSA/AES via
+# openssl, no nqptp/PTP — reliable in Docker. ALAC is decoded by the built-in decoder
+# (we don't pull in ffmpeg).
 #
-# ВАЖНО про mDNS. Образ НЕ запускает свой avahi-daemon. В network_mode: host это
-# дало бы ВТОРОЙ avahi в одном сетевом неймспейсе рядом с avahi из owntone →
-# конфликт имени хоста и «прыгающая»/исчезающая запись _raop._tcp → на iPhone/iPad
-# «не удаётся подключиться к spotineck». Вместо этого shairport публикует AirPlay
-# через ЕДИНЫЙ avahi из контейнера owntone по общему system D-Bus сокету
-# (шаренные volume dbus-socket + avahi-run). Так же, как librespot обходится своим
-# libmdns — один ответчик mDNS на host-сети.
+# IMPORTANT about mDNS. The image does NOT start its own avahi-daemon. Under
+# network_mode: host that would give a SECOND avahi in one network namespace next to
+# owntone's avahi → host-name conflict and a "jumping"/disappearing _raop._tcp record →
+# on iPhone/iPad "can't connect to spotineck". Instead, shairport publishes AirPlay
+# through the SINGLE avahi from the owntone container over the shared system D-Bus
+# socket (shared dbus-socket + avahi-run volumes). Just like librespot gets by with its
+# own libmdns — one mDNS responder per host network.
 # ─────────────────────────────────────────────────────────────────────────────
 FROM debian:bookworm-slim AS builder
 
@@ -26,8 +27,8 @@ WORKDIR /src
 RUN git clone --depth 1 --branch "${SHAIRPORT_VERSION}" \
         https://github.com/mikebrady/shairport-sync.git .
 
-# Классический AirPlay 1: avahi (mDNS-клиент к общему демону), openssl, метаданные,
-# pipe-выход (PCM в /music/airplay для OwnTone) и dummy как запасной бэкенд.
+# Classic AirPlay 1: avahi (mDNS client to the shared daemon), openssl, metadata,
+# pipe output (PCM to /music/airplay for OwnTone) and dummy as a fallback backend.
 RUN autoreconf -fi \
     && ./configure --sysconfdir=/etc \
         --with-avahi \
@@ -43,13 +44,13 @@ FROM debian:bookworm-slim
 
 ARG SHAIRPORT_VERSION=5.0.4
 LABEL org.opencontainers.image.title="spotineck-shairport" \
-      org.opencontainers.image.description="Shairport Sync ${SHAIRPORT_VERSION} classic (AirPlay 1) → pipe, mDNS через общий avahi owntone" \
+      org.opencontainers.image.description="Shairport Sync ${SHAIRPORT_VERSION} classic (AirPlay 1) → pipe, mDNS via the shared owntone avahi" \
       org.opencontainers.image.source="https://github.com/mikebrady/shairport-sync" \
       org.opencontainers.image.version="${SHAIRPORT_VERSION}" \
       org.opencontainers.image.licenses="GPL-2.0"
 
-# Только рантайм-зависимости. libavahi-client3 тянет libdbus-1-3 — он нужен, чтобы
-# публиковать AirPlay через avahi из owntone по общему system-шине D-Bus.
+# Runtime dependencies only. libavahi-client3 pulls in libdbus-1-3 — needed to
+# publish AirPlay through owntone's avahi over the shared system D-Bus.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libpopt0 libconfig9 libssl3 \
         libavahi-client3 libavahi-common3 libdbus-1-3 \

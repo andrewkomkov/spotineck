@@ -1,68 +1,68 @@
-# spotineck — Spotify Connect эндпоинт + синхрон на HomePod (AirPlay2) и Google Home (Cast)
+# spotineck — Spotify Connect endpoint + sync to HomePod (AirPlay2) and Google Home (Cast)
 #
-# Сервисы:
-#   librespot — свежий rust-librespot = Spotify Connect устройство "spotineck", пишет PCM в pipe
-#   owntone   — linuxserver/daapd: читает pipe и синхронно раздаёт на AirPlay2/Chromecast/ALSA
-#   api       — agent-friendly REST/WS поверх OwnTone (+ отдаёт web в стиле Spotify)
+# Services:
+#   librespot — fresh rust-librespot = Spotify Connect device "spotineck", writes PCM to a pipe
+#   owntone   — linuxserver/daapd: reads the pipe and synchronously fans out to AirPlay2/Chromecast/ALSA
+#   api       — agent-friendly REST/WS over OwnTone (+ serves a Spotify-style web UI)
 #
-# ВАЖНО: только Linux-хост, network_mode: host (нужно и для Spotify Connect zeroconf,
-# и для обнаружения HomePod/Google по mDNS).
+# IMPORTANT: Linux host only, network_mode: host (needed both for Spotify Connect zeroconf
+# and for discovering HomePod/Google over mDNS).
 #
-# mDNS: на host-сети должен быть РОВНО ОДИН avahi-daemon. У Linux-хоста он уже есть,
-# поэтому оба контейнера (owntone и shairport) используют avahi ХОСТА через его
-# system D-Bus (bind /run/dbus) и СВОЙ avahi не поднимают. Иначе несколько avahi
-# дерутся за имя хоста (nettop → nettop-2 → … → nettop-298), записи _raop/_daap
-# «прыгают», и iPad «не удаётся подключиться к spotineck».
+# mDNS: the host network must have EXACTLY ONE avahi-daemon. A Linux host already has one,
+# so both containers (owntone and shairport) use the HOST's avahi through its system
+# D-Bus (bind /run/dbus) and do NOT start their own. Otherwise several avahi instances
+# fight over the host name (nettop → nettop-2 → … → nettop-298), the _raop/_daap records
+# "jump around", and the iPad "can't connect to spotineck".
 
 services:
   owntone:
-    build: ./owntone                       # свой образ: OwnTone 29.2 из исходников (AirPlay2 + Cast + offset)
-    image: andrewkomkov/owntone:29.2       # опубликован в Docker Hub
+    build: ./owntone                       # custom image: OwnTone 29.2 from source (AirPlay2 + Cast + offset)
+    image: andrewkomkov/owntone:29.2       # published on Docker Hub
     container_name: spotineck-owntone
     network_mode: host
-    # docker-default AppArmor блокирует обращение контейнера к system D-Bus хоста
-    # (DENIED dbus_method_call Hello) → mDNS init failed. Снимаем профиль: контейнер
-    # и так host-network аудио-приёмник, ему нужен avahi хоста.
+    # docker-default AppArmor blocks the container from reaching the host's system D-Bus
+    # (DENIED dbus_method_call Hello) → mDNS init failed. Drop the profile: the container
+    # is a host-network audio receiver anyway, it needs the host's avahi.
     security_opt:
       - apparmor=unconfined
     environment:
       - TZ=Europe/Moscow
     volumes:
-      - ./config/owntone.conf:/etc/owntone.conf:ro   # деплой-конфиг (ALSA nettop + pipe)
-      - ./pipe:/music                                 # библиотека = общий pipe /music/spotify
-      - owntone-data:/var/cache/owntone               # бд/кэш OwnTone
-      - /run/dbus:/run/dbus                           # system D-Bus хоста → mDNS через единый avahi хоста
+      - ./config/owntone.conf:/etc/owntone.conf:ro   # deploy config (ALSA nettop + pipe)
+      - ./pipe:/music                                 # library = shared pipe /music/spotify
+      - owntone-data:/var/cache/owntone               # OwnTone db/cache
+      - /run/dbus:/run/dbus                           # host system D-Bus → mDNS via the single host avahi
     devices:
-      - /dev/snd:/dev/snd                  # локальные динамики nettop (ALSA)
+      - /dev/snd:/dev/snd                  # local nettop speakers (ALSA)
     group_add:
-      - "29"                               # gid audio на хосте — доступ к /dev/snd
+      - "29"                               # audio gid on the host — access to /dev/snd
     restart: unless-stopped
 
   librespot:
-    build: ./librespot                     # обёртка над giof71/librespot: имя из файла /config/device_name
+    build: ./librespot                     # wrapper around giof71/librespot: name from the file /config/device_name
     image: andrewkomkov/spotineck-librespot:latest
     container_name: spotineck-librespot
     network_mode: host
     volumes:
-      - ./pipe:/music                      # пишем в тот же pipe, что читает OwnTone
-      - ./config:/config                   # device_name (имя в Spotify Connect)
+      - ./pipe:/music                      # write to the same pipe OwnTone reads
+      - ./config:/config                   # device_name (name in Spotify Connect)
       - librespot-cache:/cache
     restart: unless-stopped
 
   shairport:
-    build: ./shairport                      # свой образ: Shairport Sync 5.0.4 classic из исходников
-    image: andrewkomkov/spotineck-shairport:5.0.4  # AirPlay 1 приёмник (без nqptp — надёжно в Docker)
+    build: ./shairport                      # custom image: Shairport Sync 5.0.4 classic from source
+    image: andrewkomkov/spotineck-shairport:5.0.4  # AirPlay 1 receiver (no nqptp — reliable in Docker)
     container_name: spotineck-shairport
     network_mode: host
-    # см. owntone: нужен доступ к avahi хоста через system D-Bus, снимаем apparmor.
+    # see owntone: needs access to the host's avahi via system D-Bus, drop apparmor.
     security_opt:
       - apparmor=unconfined
     cap_add:
       - SYS_NICE
     volumes:
       - ./config/shairport-sync.conf:/etc/shairport-sync.conf:ro
-      - ./pipe:/music                         # пишет PCM в /music/airplay (читает OwnTone)
-      - /run/dbus:/run/dbus                   # публикуем AirPlay через avahi ХОСТА (один avahi на host-сеть)
+      - ./pipe:/music                         # writes PCM to /music/airplay (OwnTone reads it)
+      - /run/dbus:/run/dbus                   # publish AirPlay through the HOST's avahi (one avahi per host network)
     depends_on:
       - owntone
     restart: unless-stopped
@@ -77,11 +77,11 @@ services:
       - SPOTIFY_REDIRECT_URI=http://127.0.0.1:8080/api/spotify/callback
       - SPOTIFY_TOKEN_PATH=/data/spotify_token.json
     env_file:
-      - .env            # SPOTIFY_CLIENT_ID / SPOTIFY_CLIENT_SECRET (не в git)
+      - .env            # SPOTIFY_CLIENT_ID / SPOTIFY_CLIENT_SECRET (not in git)
     volumes:
-      - ./api-data:/data                        # OAuth-токен Spotify
-      - ./config:/cfg                           # device_name (имя устройства)
-      - /var/run/docker.sock:/var/run/docker.sock  # рестарт librespot при смене имени
+      - ./api-data:/data                        # Spotify OAuth token
+      - ./config:/cfg                           # device_name (device name)
+      - /var/run/docker.sock:/var/run/docker.sock  # restart librespot on rename
     depends_on:
       - owntone
     restart: unless-stopped

@@ -1,8 +1,8 @@
 {
   "name": "spotineck",
   "short_name": "spotineck",
-  "description": "Синхронная мультирум-зона: Spotify + AirPlay на все колонки",
-  "lang": "ru",
+  "description": "A synchronized multi-room zone: Spotify + AirPlay to all speakers",
+  "lang": "en",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

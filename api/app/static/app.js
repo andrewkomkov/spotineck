@@ -1,4 +1,4 @@
-// spotineck web — REST + WS /ws поверх spotineck-api
+// spotineck web — REST + WS /ws on top of spotineck-api
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => document.querySelectorAll(s);
 const api = (path, opts) => fetch("/api" + path, opts);
@@ -11,7 +11,7 @@ let state = null;
 let lastStateAt = 0;
 let connOk = false;
 let spotify = { configured: false, authorized: false };
-let lastVol = 50;            // для mute/unmute
+let lastVol = 50;            // for mute/unmute
 let curView = "now";
 
 // ───────────────────────── toasts ─────────────────────────
@@ -34,12 +34,12 @@ async function action(promise, okMsg) {
     if (okMsg) toast(okMsg);
     return true;
   } catch (e) {
-    toast("Не получилось — " + (e.message || "ошибка"), "err");
+    toast("Didn't work — " + (e.message || "error"), "err");
     return false;
   }
 }
 
-// ───────────────────────── навигация ─────────────────────────
+// ───────────────────────── navigation ─────────────────────────
 function switchView(view) {
   curView = view;
   $$("[data-view]").forEach((x) => x.classList.toggle("active", x.dataset.view === view));
@@ -54,7 +54,7 @@ function switchView(view) {
 $$("[data-view]").forEach((b) => b.addEventListener("click", () => switchView(b.dataset.view)));
 $("#np-open").addEventListener("click", () => switchView("now"));
 
-// ───────────────────────── транспорт ─────────────────────────
+// ───────────────────────── transport ─────────────────────────
 function bindTransport(playSel, prevSel, nextSel, shufSel, repSel) {
   $(playSel).addEventListener("click", () => post("/playback/toggle"));
   $(nextSel).addEventListener("click", () => post("/playback/next"));
@@ -70,7 +70,7 @@ bindTransport("#c-play", "#c-prev", "#c-next", "#c-shuffle", "#c-repeat");
 bindTransport("#h-play", "#h-prev", "#h-next", "#h-shuffle", "#h-repeat");
 
 // ───────────────────────── draggable bar (seek / volume) ─────────────────────────
-// onCommit(ratio) шлётся на отпускании; во время тащи — только визуально.
+// onCommit(ratio) fires on release; while dragging — visual only.
 function draggableBar(barEl, { onPreview, onCommit }) {
   let dragging = false;
   const ratioFromEvent = (e) => {
@@ -96,7 +96,7 @@ function draggableBar(barEl, { onPreview, onCommit }) {
   return { isDragging: () => dragging };
 }
 
-// seek bars (нижний бар + hero)
+// seek bars (bottom bar + hero)
 let seekDrag = false, seekPreview = 0;
 function setupSeek(barSel, fillSel, curSel) {
   const bar = $(barSel), fill = $(fillSel), cur = $(curSel);
@@ -117,7 +117,7 @@ function setupSeek(barSel, fillSel, curSel) {
 setupSeek("#seek-bar", "#seek-fill", "#t-cur");
 setupSeek("#hero-seek", "#hero-fill", "#h-cur");
 
-// volume bar (нижний)
+// volume bar (bottom)
 let volDrag = false;
 draggableBar($("#vol-bar"), {
   onPreview: (ratio) => {
@@ -137,7 +137,7 @@ $("#vol-mute").addEventListener("click", () => {
   setVolume(cur > 0 ? 0 : lastVol || 40);
 });
 
-// master volume (range в «Колонки»)
+// master volume (range in "Speakers")
 const mvol = $("#master-vol");
 mvol.addEventListener("input", (e) => {
   $("#master-vol-val").textContent = e.target.value;
@@ -145,14 +145,14 @@ mvol.addEventListener("input", (e) => {
 });
 mvol.addEventListener("change", (e) => setVolume(+e.target.value));
 
-// ───────────────────────── колонки ─────────────────────────
+// ───────────────────────── speakers ─────────────────────────
 $("#btn-all-on").addEventListener("click", () =>
-  action(put("/speakers/group", { ids: state.speakers.map((s) => s.id) }), "Все колонки в зоне"));
+  action(put("/speakers/group", { ids: state.speakers.map((s) => s.id) }), "All speakers in the zone"));
 $("#btn-all-off").addEventListener("click", () =>
-  action(put("/speakers/group", { ids: [] }), "Зона выключена"));
+  action(put("/speakers/group", { ids: [] }), "Zone off"));
 $("#btn-only-local").addEventListener("click", () => {
   const local = state.speakers.filter((s) => s.type === "ALSA").map((s) => s.id);
-  action(put("/speakers/group", { ids: local }), "Только локальный звук");
+  action(put("/speakers/group", { ids: local }), "Local audio only");
 });
 
 let speakersSig = "";
@@ -176,7 +176,7 @@ function speakerCard(sp) {
       <input type="range" class="vol-range" min="0" max="100" value="${sp.volume}" style="--p:${sp.volume}%"/>
     </div>
     <div class="offset-row">
-      <span class="offset-label">задержка</span>
+      <span class="offset-label">delay</span>
       <input type="range" class="offset-range" min="-2000" max="2000" step="10" value="${sp.offset_ms}"/>
       <span class="offset-val">${sp.offset_ms} ms</span>
     </div>
@@ -184,10 +184,10 @@ function speakerCard(sp) {
       <button class="opreset" data-off="0">0</button>
       <button class="opreset" data-off="-250">−250</button>
       <button class="opreset" data-off="-500">−500</button>
-      <button class="opreset" data-off="-1000">−1000 (видео)</button>
+      <button class="opreset" data-off="-1000">−1000 (video)</button>
     </div>
     ${sp.needs_auth ? `<div class="auth-row">
-      <span class="badge-auth">нужен PIN с колонки:</span>
+      <span class="badge-auth">PIN from the speaker:</span>
       <input class="pin-input" maxlength="4" inputmode="numeric" placeholder="0000"/>
       <button class="chip pin-ok">OK</button>
     </div>` : ""}
@@ -206,14 +206,14 @@ function speakerCard(sp) {
   el.querySelectorAll(".opreset").forEach((b) => b.addEventListener("click", () => {
     const v = +b.dataset.off;
     off.value = v; offVal.textContent = v + " ms";
-    action(post("/speakers/" + sp.id, { offset_ms: v }), `${sp.name}: задержка ${v} ms`);
+    action(post("/speakers/" + sp.id, { offset_ms: v }), `${sp.name}: delay ${v} ms`);
   }));
   if (sp.needs_auth) {
     const pin = el.querySelector(".pin-input");
     const send = async () => {
       const r = await post("/speakers/" + sp.id + "/verify", { pin: pin.value });
-      if (r.ok) { post("/speakers/" + sp.id, { selected: true }); toast(sp.name + " подтверждена"); }
-      else { pin.value = ""; pin.placeholder = "ещё раз"; toast("Неверный PIN", "err"); }
+      if (r.ok) { post("/speakers/" + sp.id, { selected: true }); toast(sp.name + " verified"); }
+      else { pin.value = ""; pin.placeholder = "again"; toast("Wrong PIN", "err"); }
     };
     el.querySelector(".pin-ok").addEventListener("click", send);
     pin.addEventListener("keydown", (e) => { if (e.key === "Enter") send(); });
@@ -247,7 +247,7 @@ function updateSpeakerValues() {
   }
 }
 
-// зона: чипы быстрого включения (в Now-hero)
+// zone: quick-toggle chips (in the Now hero)
 function renderZoneChips() {
   const wrap = $("#now-chips"); wrap.innerHTML = "";
   state.speakers.forEach((sp) => {
@@ -259,15 +259,10 @@ function renderZoneChips() {
     wrap.appendChild(c);
   });
   const n = state.speakers.filter((s) => s.selected).length;
-  $("#zone-summary").textContent = n ? `В зоне: ${n} ${plural(n, "колонка", "колонки", "колонок")}` : "Зона пуста — включи колонку";
-}
-function plural(n, a, b, c) {
-  const m = n % 100, d = n % 10;
-  if (m >= 11 && m <= 14) return c;
-  if (d === 1) return a; if (d >= 2 && d <= 4) return b; return c;
+  $("#zone-summary").textContent = n ? `In zone: ${n} ${n === 1 ? "speaker" : "speakers"}` : "Zone empty — enable a speaker";
 }
 
-// ───────────────────────── очередь ─────────────────────────
+// ───────────────────────── queue ─────────────────────────
 async function loadQueue() {
   const wrap = $("#queue-list");
   wrap.innerHTML = '<div class="empty"><span class="spin"></span></div>';
@@ -276,7 +271,7 @@ async function loadQueue() {
     wrap.innerHTML = "";
     const items = q.items || [];
     const curId = state && state.playback ? null : null;
-    if (!items.length) { wrap.innerHTML = '<div class="empty">Очередь пуста. Запусти музыку из Поиска или выбери spotineck в Spotify.</div>'; return; }
+    if (!items.length) { wrap.innerHTML = '<div class="empty">Queue is empty. Start music from Search or pick spotineck in Spotify.</div>'; return; }
     items.forEach((it, i) => {
       const playing = state && state.playback.track && it.title === state.playback.track.title && it.artist === state.playback.track.artist;
       wrap.appendChild(rowEl({
@@ -287,11 +282,11 @@ async function loadQueue() {
         playing,
       }));
     });
-  } catch { wrap.innerHTML = '<div class="empty">Не удалось загрузить очередь</div>'; }
+  } catch { wrap.innerHTML = '<div class="empty">Failed to load the queue</div>'; }
 }
-$("#btn-clear-queue").addEventListener("click", async () => { await action(post("/queue/clear"), "Очередь очищена"); loadQueue(); });
+$("#btn-clear-queue").addEventListener("click", async () => { await action(post("/queue/clear"), "Queue cleared"); loadQueue(); });
 
-// общий рендер строки результата/очереди
+// shared renderer for a result/queue row
 function rowEl({ num, title, sub, art, round, playing, actions }) {
   const el = document.createElement("div");
   el.className = "row" + (playing ? " playing" : "");
@@ -320,7 +315,7 @@ function rowEl({ num, title, sub, art, round, playing, actions }) {
   return el;
 }
 
-// ───────────────────────── поиск (Spotify каталог) ─────────────────────────
+// ───────────────────────── search (Spotify catalog) ─────────────────────────
 let searchTimer, searchType = "track", lastQuery = "";
 $("#search-input").addEventListener("input", (e) => {
   clearTimeout(searchTimer);
@@ -339,8 +334,8 @@ $$("#search-seg .seg-item").forEach((b) => b.addEventListener("click", () => {
   if (lastQuery) doSearch(lastQuery);
 }));
 
-function playUri(uri, label) { return action(post("/spotify/play", { uri }), label ? "▶ " + label : "Играет"); }
-function queueUri(uri, label) { return action(post("/spotify/queue", { uri }), "В очередь: " + (label || "")); }
+function playUri(uri, label) { return action(post("/spotify/play", { uri }), label ? "▶ " + label : "Playing"); }
+function queueUri(uri, label) { return action(post("/spotify/queue", { uri }), "Queued: " + (label || "")); }
 
 async function doSearch(q) {
   const wrap = $("#search-results");
@@ -348,15 +343,15 @@ async function doSearch(q) {
   wrap.innerHTML = '<div class="empty"><span class="spin"></span></div>';
   if (!spotify.authorized) return localSearch(q);
   try {
-    // limit=10: у Spotify-приложения в dev-режиме поиск капается на 10 (≥12 → "Invalid limit")
+    // limit=10: a dev-mode Spotify app caps search at 10 (≥12 → "Invalid limit")
     const r = await (await api(`/spotify/search?q=${encodeURIComponent(q)}&type=${searchType}&limit=10`)).json();
     if (q !== lastQuery) return;
     wrap.innerHTML = "";
     const key = searchType + "s";
     const items = ((r[key] && r[key].items) || []).filter(Boolean);
-    if (!items.length) { wrap.innerHTML = '<div class="empty">Ничего не найдено</div>'; return; }
+    if (!items.length) { wrap.innerHTML = '<div class="empty">Nothing found</div>'; return; }
     items.forEach((it) => wrap.appendChild(searchRow(it)));
-  } catch { wrap.innerHTML = '<div class="empty">Ошибка поиска</div>'; }
+  } catch { wrap.innerHTML = '<div class="empty">Search error</div>'; }
 }
 
 function imgOf(it) {
@@ -367,14 +362,14 @@ function searchRow(it) {
   const round = searchType === "artist";
   let title = it.name, sub = "";
   if (searchType === "track") sub = (it.artists || []).map((a) => a.name).join(", ") + (it.album ? " · " + it.album.name : "");
-  else if (searchType === "album") sub = "Альбом · " + (it.artists || []).map((a) => a.name).join(", ");
-  else if (searchType === "artist") sub = "Артист";
-  else if (searchType === "playlist") sub = "Плейлист · " + ((it.owner && it.owner.display_name) || "");
+  else if (searchType === "album") sub = "Album · " + (it.artists || []).map((a) => a.name).join(", ");
+  else if (searchType === "artist") sub = "Artist";
+  else if (searchType === "playlist") sub = "Playlist · " + ((it.owner && it.owner.display_name) || "");
   const row = rowEl({
     title, sub, art: imgOf(it), round,
     actions: [
-      { icon: "▶", primary: true, title: "Играть на зоне", fn: () => playUri(it.uri, it.name) },
-      ...(searchType === "track" ? [{ icon: "＋", title: "В очередь", fn: () => queueUri(it.uri, it.name) }] : []),
+      { icon: "▶", primary: true, title: "Play on the zone", fn: () => playUri(it.uri, it.name) },
+      ...(searchType === "track" ? [{ icon: "＋", title: "Queue", fn: () => queueUri(it.uri, it.name) }] : []),
     ],
   });
   row.addEventListener("click", () => playUri(it.uri, it.name));
@@ -387,18 +382,18 @@ async function localSearch(q) {
     if (q !== lastQuery) return;
     wrap.innerHTML = "";
     const tracks = (r.tracks && r.tracks.items) || [];
-    if (!tracks.length) { wrap.innerHTML = '<div class="empty">Ничего не найдено в локальной библиотеке</div>'; return; }
+    if (!tracks.length) { wrap.innerHTML = '<div class="empty">Nothing found in the local library</div>'; return; }
     tracks.forEach((t, i) => wrap.appendChild(rowEl({ num: i + 1, title: t.title || "—", sub: [t.artist, t.album].filter(Boolean).join(" · ") })));
-  } catch { wrap.innerHTML = '<div class="empty">Ошибка поиска</div>'; }
+  } catch { wrap.innerHTML = '<div class="empty">Search error</div>'; }
 }
 
-// ───────────────────────── настройки ─────────────────────────
+// ───────────────────────── settings ─────────────────────────
 async function loadSettings() {
   try {
     const d = await (await api("/device-name")).json();
     $("#device-name-input").value = d.name || "";
   } catch {}
-  $("#set-conn").textContent = connOk ? "в сети" : "нет связи";
+  $("#set-conn").textContent = connOk ? "online" : "offline";
   const n = state ? state.speakers.filter((s) => s.selected).length : 0;
   $("#set-zone").textContent = String(n);
   await loadSpotifyStatus();
@@ -408,18 +403,18 @@ async function loadSpotifyStatus() {
     spotify = await (await api("/spotify/status")).json();
   } catch { spotify = { configured: false, authorized: false }; }
   const badge = $("#sp-status");
-  if (spotify.authorized) { badge.textContent = "подключён"; badge.className = "badge ok"; }
-  else if (spotify.configured) { badge.textContent = "не авторизован"; badge.className = "badge warn"; }
-  else { badge.textContent = "не настроен"; badge.className = "badge"; }
+  if (spotify.authorized) { badge.textContent = "connected"; badge.className = "badge ok"; }
+  else if (spotify.configured) { badge.textContent = "not authorized"; badge.className = "badge warn"; }
+  else { badge.textContent = "not configured"; badge.className = "badge"; }
   $("#sp-login").classList.toggle("hidden", !spotify.configured || spotify.authorized);
   $("#sp-playhere").classList.toggle("hidden", !spotify.authorized);
   $("#search-hint").textContent = spotify.authorized
-    ? "Полный каталог Spotify. Нажми на результат — заиграет на всей группе."
-    : "Войди в Spotify (Настройки) для поиска по каталогу. Сейчас — локальная библиотека.";
+    ? "The full Spotify catalog. Tap a result — it plays on the whole group."
+    : "Log in to Spotify (Settings) to search the catalog. For now — the local library.";
 }
 $("#sp-login").addEventListener("click", () => window.open("/api/spotify/login", "_blank"));
-$("#sp-playhere").addEventListener("click", () => action(post("/spotify/play-here"), "Переношу на spotineck"));
-$("#h-playhere").addEventListener("click", () => action(post("/spotify/play-here"), "Переношу на spotineck"));
+$("#sp-playhere").addEventListener("click", () => action(post("/spotify/play-here"), "Transferring to spotineck"));
+$("#h-playhere").addEventListener("click", () => action(post("/spotify/play-here"), "Transferring to spotineck"));
 
 async function saveDeviceName() {
   const btn = $("#device-name-save");
@@ -429,10 +424,10 @@ async function saveDeviceName() {
   try {
     const r = await post("/device-name", { name });
     const d = await r.json().catch(() => ({}));
-    if (r.ok) { $("#device-name-hint").textContent = `Готово — устройство теперь «${d.name}». Spotify Connect перезапущен (~3 сек).`; toast("Имя сохранено"); }
-    else { $("#device-name-hint").textContent = `Ошибка: ${d.error || r.status}`; toast("Ошибка сохранения", "err"); }
-  } catch { $("#device-name-hint").textContent = "Ошибка сети"; toast("Ошибка сети", "err"); }
-  btn.disabled = false; btn.textContent = "Сохранить";
+    if (r.ok) { $("#device-name-hint").textContent = `Done — the device is now "${d.name}". Spotify Connect restarted (~3 s).`; toast("Name saved"); }
+    else { $("#device-name-hint").textContent = `Error: ${d.error || r.status}`; toast("Save failed", "err"); }
+  } catch { $("#device-name-hint").textContent = "Network error"; toast("Network error", "err"); }
+  btn.disabled = false; btn.textContent = "Save";
 }
 $("#device-name-save").addEventListener("click", saveDeviceName);
 $("#device-name-input").addEventListener("keydown", (e) => { if (e.key === "Enter") saveDeviceName(); });
@@ -447,10 +442,10 @@ let curArt = "";
 function renderNow() {
   const p = state.playback, t = p.track;
   const playing = p.state === "play";
-  const title = t.title || (p.state === "stop" ? "Ничего не играет" : "spotineck");
+  const title = t.title || (p.state === "stop" ? "Nothing playing" : "spotineck");
   const artist = t.artist || "";
 
-  // нижний бар
+  // bottom bar
   $("#np-title").textContent = title;
   $("#np-artist").textContent = artist;
   $("#c-play").textContent = playing ? "⏸" : "▶";
@@ -463,7 +458,7 @@ function renderNow() {
   $("#hero-title").textContent = title;
   $("#hero-artist").textContent = artist;
   $("#hero-album").textContent = t.album || "";
-  $("#hero-source").textContent = artist ? "Сейчас играет" : "spotineck";
+  $("#hero-source").textContent = artist ? "Now playing" : "spotineck";
   $("#h-play").textContent = playing ? "⏸" : "▶";
   $("#h-shuffle").classList.toggle("active", p.shuffle);
   $("#h-repeat").classList.toggle("active", p.repeat !== "off");
@@ -471,7 +466,7 @@ function renderNow() {
   $("#h-len").textContent = fmt(p.length_ms);
   $("#h-playhere").classList.toggle("hidden", !(spotify.authorized && p.state !== "play"));
 
-  // обложка + амбиент
+  // artwork + ambient
   const art = t.artwork_url ? (t.artwork_url.startsWith("/") ? t.artwork_url + "?t=" + Date.now() : t.artwork_url) : "";
   if (art !== curArt) {
     curArt = art;
@@ -485,7 +480,7 @@ function renderNow() {
     else amb.classList.remove("on");
   }
 
-  // громкость
+  // volume
   if (!volDrag) { $("#vol-fill").style.width = p.volume + "%"; $("#vol-bar .bar-knob").style.left = p.volume + "%"; }
   $("#vol-mute").textContent = p.volume === 0 ? "🔇" : "🔊";
   if (document.activeElement !== mvol) {
@@ -508,7 +503,7 @@ function tickProgress() {
 }
 setInterval(tickProgress, 250);
 
-// ───────────────────────── приём состояния ─────────────────────────
+// ───────────────────────── state intake ─────────────────────────
 function applyState(s) {
   const first = !state;
   state = s;
@@ -533,11 +528,11 @@ function connectWS() {
 function setConn(ok) {
   connOk = ok;
   $("#conn-dot").classList.toggle("ok", ok);
-  $("#conn-text").textContent = ok ? "в сети" : "переподключение…";
-  const sc = $("#set-conn"); if (sc) sc.textContent = ok ? "в сети" : "нет связи";
+  $("#conn-text").textContent = ok ? "online" : "reconnecting…";
+  const sc = $("#set-conn"); if (sc) sc.textContent = ok ? "online" : "offline";
 }
 
-// ───────────────────────── клавиатура ─────────────────────────
+// ───────────────────────── keyboard ─────────────────────────
 document.addEventListener("keydown", (e) => {
   if (/INPUT|TEXTAREA/.test(document.activeElement.tagName)) return;
   const p = state && state.playback;
@@ -547,7 +542,7 @@ document.addEventListener("keydown", (e) => {
     case "ArrowLeft": if (e.shiftKey) post("/playback/previous"); break;
     case "ArrowUp": e.preventDefault(); if (p) setVolume(p.volume + 5); break;
     case "ArrowDown": e.preventDefault(); if (p) setVolume(p.volume - 5); break;
-    case "s": case "ы": post("/playback/shuffle", { enabled: !(p && p.shuffle) }); break;
+    case "s": post("/playback/shuffle", { enabled: !(p && p.shuffle) }); break;
     case "/": e.preventDefault(); switchView("search"); break;
   }
 });
@@ -557,8 +552,8 @@ if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));
 }
 
-// ───────────────────────── старт ─────────────────────────
+// ───────────────────────── start ─────────────────────────
 loadSpotifyStatus();
 api("/state").then((r) => r.json()).then(applyState).catch(() => {});
 connectWS();
-if (location.search.includes("spotify=ok")) { toast("Spotify подключён"); history.replaceState(null, "", "/"); }
+if (location.search.includes("spotify=ok")) { toast("Spotify connected"); history.replaceState(null, "", "/"); }

@@ -1,14 +1,14 @@
 """
-Spotify Web API слой для spotineck.
+Spotify Web API layer for spotineck.
 
-Даёт нашему UI/агенту управлять Spotify напрямую:
-  * запускать музыку на устройстве spotineck (transfer playback) — не трогая телефон;
-  * читать богатые метаданные now-playing (обложка, трек, артист);
-  * искать по полному каталогу Spotify;
-  * запускать конкретный трек/плейлист/альбом по URI.
+Lets our UI/agent control Spotify directly:
+  * start music on the spotineck device (transfer playback) — without touching the phone;
+  * read rich now-playing metadata (artwork, track, artist);
+  * search the full Spotify catalog;
+  * start a specific track/playlist/album by URI.
 
-OAuth Authorization Code. Токены лежат в /data/spotify_token.json и сами обновляются.
-Креды берутся из окружения (SPOTIFY_CLIENT_ID / SPOTIFY_CLIENT_SECRET), см. .env.
+OAuth Authorization Code. Tokens live in /data/spotify_token.json and refresh themselves.
+Credentials come from the environment (SPOTIFY_CLIENT_ID / SPOTIFY_CLIENT_SECRET), see .env.
 """
 import base64
 import json
@@ -43,11 +43,11 @@ API = "https://api.spotify.com/v1"
 
 router = APIRouter(prefix="/api/spotify", tags=["spotify"])
 _token: dict | None = None
-_np_cache: dict = {"at": 0.0, "val": None}   # короткий кэш now-playing (TTL ниже)
+_np_cache: dict = {"at": 0.0, "val": None}   # short now-playing cache (TTL below)
 _NP_TTL = 2.0
 
 
-# ───────────────────────── токены ─────────────────────────
+# ───────────────────────── tokens ─────────────────────────
 def _load() -> dict | None:
     global _token
     if _token is None and TOKEN_PATH.exists():
@@ -89,7 +89,7 @@ async def _refresh(tok: dict) -> dict:
 async def _access_token() -> str:
     tok = _load()
     if not tok:
-        raise HTTPException(401, "Spotify не авторизован. Открой GET /api/spotify/login")
+        raise HTTPException(401, "Spotify not authorized. Open GET /api/spotify/login")
     if tok.get("expires_at", 0) < time.time() + 60:
         tok = await _refresh(tok)
     return tok["access_token"]
@@ -99,7 +99,7 @@ async def _sp(method: str, path: str, **kw) -> httpx.Response:
     token = await _access_token()
     async with httpx.AsyncClient(timeout=10) as c:
         r = await c.request(method, API + path, headers={"Authorization": f"Bearer {token}"}, **kw)
-    if r.status_code == 401:  # токен протух между проверками — обновим и повторим
+    if r.status_code == 401:  # token expired between checks — refresh and retry
         await _refresh(_load())
         token = await _access_token()
         async with httpx.AsyncClient(timeout=10) as c:
@@ -108,7 +108,7 @@ async def _sp(method: str, path: str, **kw) -> httpx.Response:
 
 
 # ───────────────────────── OAuth ─────────────────────────
-@router.get("/status", summary="Состояние интеграции Spotify")
+@router.get("/status", summary="Spotify integration status")
 async def status():
     return {
         "configured": bool(CLIENT_ID and CLIENT_SECRET),
@@ -118,10 +118,10 @@ async def status():
     }
 
 
-@router.get("/login", summary="Начать OAuth (открой в браузере)")
+@router.get("/login", summary="Start OAuth (open in a browser)")
 async def login():
     if not CLIENT_ID:
-        raise HTTPException(500, "SPOTIFY_CLIENT_ID не задан (см. ~/spotineck/.env)")
+        raise HTTPException(500, "SPOTIFY_CLIENT_ID is not set (see ~/spotineck/.env)")
     q = urlencode({
         "client_id": CLIENT_ID,
         "response_type": "code",
@@ -131,7 +131,7 @@ async def login():
     return RedirectResponse(f"{AUTH_URL}?{q}")
 
 
-@router.get("/callback", summary="OAuth callback (Spotify редиректит сюда)")
+@router.get("/callback", summary="OAuth callback (Spotify redirects here)")
 async def callback(code: str = Query(...)):
     async with httpx.AsyncClient(timeout=10) as c:
         r = await c.post(
@@ -140,14 +140,14 @@ async def callback(code: str = Query(...)):
             data={"grant_type": "authorization_code", "code": code, "redirect_uri": REDIRECT_URI},
         )
     if r.status_code != 200:
-        raise HTTPException(400, f"Обмен кода не удался: {r.text}")
+        raise HTTPException(400, f"Code exchange failed: {r.text}")
     tok = r.json()
     tok["expires_at"] = time.time() + tok.get("expires_in", 3600)
     _save(tok)
     return RedirectResponse("/?spotify=ok")
 
 
-# ───────────────────────── управление ─────────────────────────
+# ───────────────────────── control ─────────────────────────
 async def _find_device() -> dict | None:
     r = await _sp("GET", "/me/player/devices")
     if r.status_code != 200:
@@ -158,20 +158,20 @@ async def _find_device() -> dict | None:
     return None
 
 
-@router.get("/devices", summary="Видимые Spotify Connect устройства")
+@router.get("/devices", summary="Visible Spotify Connect devices")
 async def devices():
     r = await _sp("GET", "/me/player/devices")
     return r.json() if r.status_code == 200 else {"devices": []}
 
 
-@router.post("/play-here", summary="Перенести воспроизведение на spotineck (играть на группе)")
+@router.post("/play-here", summary="Transfer playback to spotineck (play on the group)")
 async def play_here():
     dev = await _find_device()
     if not dev:
         raise HTTPException(
             404,
-            f"Устройство '{DEVICE_NAME}' не видно в Spotify. Убедись, что контейнер owntone "
-            f"запущен и хоть раз выбери 'spotineck' в приложении Spotify, чтобы оно появилось.",
+            f"Device '{DEVICE_NAME}' is not visible in Spotify. Make sure the owntone container "
+            f"is running and pick 'spotineck' in the Spotify app at least once so it shows up.",
         )
     r = await _sp("PUT", "/me/player", json={"device_ids": [dev["id"]], "play": True})
     if r.status_code not in (200, 202, 204):
@@ -183,11 +183,11 @@ class PlayBody(BaseModel):
     uri: str | None = None        # spotify:track:... / spotify:album:... / spotify:playlist:...
 
 
-@router.post("/play", summary="Запустить трек/альбом/плейлист по URI на spotineck")
+@router.post("/play", summary="Start a track/album/playlist by URI on spotineck")
 async def play(body: PlayBody):
     dev = await _find_device()
     if not dev:
-        raise HTTPException(404, f"Устройство '{DEVICE_NAME}' не видно в Spotify.")
+        raise HTTPException(404, f"Device '{DEVICE_NAME}' is not visible in Spotify.")
     payload: dict = {}
     if body.uri:
         if body.uri.startswith("spotify:track:"):
@@ -201,10 +201,10 @@ async def play(body: PlayBody):
 
 
 class QueueBody(BaseModel):
-    uri: str  # spotify:track:... — что добавить в очередь воспроизведения
+    uri: str  # spotify:track:... — what to add to the playback queue
 
 
-@router.post("/queue", summary="Добавить трек в очередь Spotify (играет на spotineck)")
+@router.post("/queue", summary="Add a track to the Spotify queue (plays on spotineck)")
 async def queue(body: QueueBody):
     dev = await _find_device()
     params = {"uri": body.uri}
@@ -217,8 +217,8 @@ async def queue(body: QueueBody):
 
 
 async def get_now_playing() -> dict | None:
-    """Нормализованные метаданные текущего трека из Spotify, или None если не играет/не авторизован.
-    Кэшируется на _NP_TTL сек, чтобы не долбить Spotify API на каждое WS-событие."""
+    """Normalized metadata of the current Spotify track, or None if not playing/not authorized.
+    Cached for _NP_TTL s to avoid hammering the Spotify API on every WS event."""
     if _load() is None:
         return None
     now = time.monotonic()
@@ -253,15 +253,15 @@ async def get_now_playing() -> dict | None:
     })
 
 
-@router.get("/now-playing", summary="Богатые метаданные текущего трека из Spotify")
+@router.get("/now-playing", summary="Rich metadata of the current Spotify track")
 async def now_playing():
     np = await get_now_playing()
     return np or {"playing": False}
 
 
-@router.get("/search", summary="Поиск по полному каталогу Spotify")
+@router.get("/search", summary="Search the full Spotify catalog")
 async def search(q: str, type: str = "track,artist,album,playlist", limit: int = 10):
-    # dev-режим приложения Spotify капает limit поиска на 10 (≥12 → "Invalid limit")
+    # a dev-mode Spotify app caps the search limit at 10 (≥12 → "Invalid limit")
     limit = max(1, min(limit, 10))
     r = await _sp("GET", "/search", params={"q": q, "type": type, "limit": limit})
     if r.status_code != 200:

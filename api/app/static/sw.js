@@ -1,5 +1,5 @@
-// spotineck PWA service worker — кеширует app-shell для офлайн-старта и
-// устанавливаемости. Данные (/api, /ws) всегда идут в сеть.
+// spotineck PWA service worker — caches the app shell for offline start and
+// installability. Data (/api, /ws) always goes to the network.
 const CACHE = "spotineck-v1";
 const SHELL = [
   "/", "/index.html", "/styles.css", "/app.js",
@@ -20,9 +20,9 @@ self.addEventListener("activate", (e) => {
 
 self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);
-  // живые данные — мимо кеша
+  // live data — bypass the cache
   if (e.request.method !== "GET" || url.pathname.startsWith("/api") || url.pathname === "/ws") return;
-  // app-shell: отдаём из кеша мгновенно, в фоне обновляем
+  // app shell: serve from cache instantly, update in the background
   e.respondWith(
     caches.match(e.request).then((cached) => {
       const net = fetch(e.request)

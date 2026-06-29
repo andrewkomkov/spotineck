@@ -1,5 +1,5 @@
-# Обёртка над giof71/librespot: имя устройства Spotify Connect берётся из файла
-# /config/device_name (его пишет наш api). При смене имени api рестартует контейнер.
+# Wrapper around giof71/librespot: the Spotify Connect device name is read from the
+# file /config/device_name (written by our api). On rename, the api restarts the container.
 FROM giof71/librespot:latest
 COPY entrypoint.sh /lse.sh
 ENTRYPOINT ["/bin/sh", "/lse.sh"]

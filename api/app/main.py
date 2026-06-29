@@ -1,12 +1,12 @@
 """
-spotineck-api — чистый agent-friendly слой поверх OwnTone.
+spotineck-api — a clean, agent-friendly layer over OwnTone.
 
-OwnTone отдаёт богатый, но низкоуровневый REST+WS API. Этот сервис превращает его в
-предсказуемый набор эндпоинтов с единым снимком состояния, OpenAPI-схемой (/docs,
-/openapi.json) и WebSocket'ом для реального времени. Плюс отдаёт веб-интерфейс.
+OwnTone exposes a rich but low-level REST+WS API. This service turns it into a
+predictable set of endpoints with a single state snapshot, an OpenAPI schema (/docs,
+/openapi.json) and a WebSocket for real-time updates. It also serves the web interface.
 
-Фишка spotineck — управление ГРУППОЙ колонок (HomePod / Google Home / любые AirPlay+Cast)
-как одной синхронной зоной, поверх единственного Spotify Connect эндпоинта.
+The point of spotineck is controlling a GROUP of speakers (HomePod / Google Home /
+any AirPlay+Cast) as one synchronized zone, on top of a single Spotify Connect endpoint.
 """
 import asyncio
 import json
@@ -15,8 +15,8 @@ import os
 from contextlib import asynccontextmanager
 from typing import Any
 
-# веб-манифест PWA должен отдаваться с правильным MIME, иначе Chrome на Android
-# не предложит установку. StaticFiles берёт тип из mimetypes — доучиваем его.
+# the PWA web manifest must be served with the correct MIME type, otherwise Chrome on
+# Android won't offer to install. StaticFiles takes the type from mimetypes — teach it.
 mimetypes.add_type("application/manifest+json", ".webmanifest")
 
 import httpx
@@ -32,22 +32,22 @@ OWNTONE_URL = os.environ.get("OWNTONE_URL", "http://127.0.0.1:3689")
 DEVICE_NAME_FILE = os.environ.get("DEVICE_NAME_FILE", "/cfg/device_name")
 LIBRESPOT_CONTAINER = os.environ.get("LIBRESPOT_CONTAINER", "spotineck-librespot")
 PORT = int(os.environ.get("SPOTINECK_PORT", "8080"))
-# websocket_port OwnTone (см. owntone.conf). По умолчанию 3688.
+# OwnTone websocket_port (see owntone.conf). Defaults to 3688.
 OWNTONE_WS = os.environ.get("OWNTONE_WS", "ws://127.0.0.1:3688")
 
-http: httpx.AsyncClient = None  # инициализируется в lifespan
-# offset_ms по колонкам: OwnTone GET /api/outputs не всегда возвращает его обратно,
-# поэтому помним последнее заданное значение, чтобы слайдер в UI не сбрасывался.
+http: httpx.AsyncClient = None  # initialized in lifespan
+# per-speaker offset_ms: OwnTone GET /api/outputs doesn't always return it back, so we
+# remember the last value we set, so the slider in the UI doesn't reset.
 _offsets: dict[str, int] = {}
 
 
-# ───────────────────────── модели ответов (для OpenAPI / агентов) ─────────────────────────
+# ───────────────────────── response models (for OpenAPI / agents) ─────────────────────────
 class Track(BaseModel):
     title: str | None = None
     artist: str | None = None
     album: str | None = None
     length_ms: int = 0
-    artwork_url: str | None = Field(None, description="Относительный URL обложки на этом API")
+    artwork_url: str | None = Field(None, description="Relative URL of the artwork on this API")
     uri: str | None = None
 
 
@@ -65,9 +65,9 @@ class Speaker(BaseModel):
     id: str
     name: str
     type: str = Field("", description="AirPlay 1/2, Chromecast, ALSA …")
-    selected: bool = Field(False, description="входит ли в синхронную группу прямо сейчас")
+    selected: bool = Field(False, description="whether it's in the synchronized group right now")
     volume: int = 0
-    offset_ms: int = Field(0, description="компенсация задержки, -2000..2000 (минус = играть раньше)")
+    offset_ms: int = Field(0, description="delay compensation, -2000..2000 (negative = play earlier)")
     has_password: bool = False
     needs_auth: bool = False
 
@@ -76,10 +76,10 @@ class State(BaseModel):
     playback: Playback
     speakers: list[Speaker]
     queue_count: int = 0
-    server_ts: float = Field(0, description="время сервера в мс — для интерполяции прогресса на клиенте")
+    server_ts: float = Field(0, description="server time in ms — for interpolating progress on the client")
 
 
-# ───────────────────────── общение с OwnTone ─────────────────────────
+# ───────────────────────── talking to OwnTone ─────────────────────────
 async def ot_get(path: str, **params) -> dict:
     r = await http.get(path, params=params or None)
     r.raise_for_status()
@@ -102,9 +102,9 @@ async def build_state() -> State:
     items = queue.get("items", [])
     now = next((it for it in items if it.get("id") == player.get("item_id")), None)
     track = Track()
-    # Spotify Connect (librespot) пишет pipe без метаданных — у OwnTone трек "spotify".
-    # Только для него подмешиваем богатые метаданные из Spotify Web API.
-    # AirPlay (shairport) шлёт свои метаданные — их OwnTone уже отдаёт, не трогаем.
+    # Spotify Connect (librespot) writes the pipe without metadata — OwnTone's track is "spotify".
+    # Only for that case do we mix in rich metadata from the Spotify Web API.
+    # AirPlay (shairport) sends its own metadata — OwnTone already exposes it, leave it alone.
     is_spotify = bool(now and now.get("title") == "spotify")
     sp_np = await spotify.get_now_playing() if is_spotify else None
     if sp_np and sp_np.get("title"):
@@ -113,7 +113,7 @@ async def build_state() -> State:
             artist=sp_np.get("artist"),
             album=sp_np.get("album"),
             length_ms=sp_np.get("length_ms", 0),
-            artwork_url=sp_np.get("artwork_url"),   # внешний URL обложки Spotify
+            artwork_url=sp_np.get("artwork_url"),   # external Spotify artwork URL
             uri=sp_np.get("uri"),
         )
     elif now:
@@ -156,7 +156,7 @@ async def build_state() -> State:
     )
 
 
-# ───────────────────────── WebSocket: relay реального времени ─────────────────────────
+# ───────────────────────── WebSocket: real-time relay ─────────────────────────
 clients: set[WebSocket] = set()
 
 
@@ -179,7 +179,7 @@ async def broadcast_state() -> None:
 
 
 async def owntone_listener() -> None:
-    """Подписка на события OwnTone → ретрансляция состояния клиентам."""
+    """Subscribe to OwnTone events → relay state to clients."""
     sub = json.dumps({"notify": ["player", "outputs", "queue", "volume", "options"]})
     while True:
         try:
@@ -189,7 +189,7 @@ async def owntone_listener() -> None:
                 async for _ in ws:
                     await broadcast_state()
         except Exception:
-            await asyncio.sleep(2)  # OwnTone не готов / реконнект
+            await asyncio.sleep(2)  # OwnTone not ready / reconnect
 
 
 @asynccontextmanager
@@ -206,36 +206,36 @@ app = FastAPI(
     title="spotineck API",
     version="1.0.0",
     description=(
-        "Управление синхронной мультирум-зоной поверх Spotify Connect.\n\n"
-        "Один эндпоинт `spotineck` в Spotify раздаёт звук на группу колонок "
-        "(HomePod через AirPlay 2, Google Home через Chromecast и любые другие). "
-        "Этот API даёт чистое управление воспроизведением, громкостью и — главное — "
-        "составом синхронной группы колонок.\n\n"
-        "Для агентов: см. `GET /api/capabilities`, полная схема в `/openapi.json`."
+        "Control a synchronized multi-room zone on top of Spotify Connect.\n\n"
+        "A single `spotineck` endpoint in Spotify fans audio out to a group of speakers "
+        "(HomePod via AirPlay 2, Google Home via Chromecast and any others). "
+        "This API gives clean control over playback, volume and — most importantly — "
+        "the membership of the synchronized speaker group.\n\n"
+        "For agents: see `GET /api/capabilities`, the full schema is in `/openapi.json`."
     ),
     lifespan=lifespan,
 )
 
-# Spotify Web API слой (OAuth + transfer + поиск по каталогу)
+# Spotify Web API layer (OAuth + transfer + catalog search)
 app.include_router(spotify.router)
 
 
-# ───────────────────────── состояние ─────────────────────────
-@app.get("/api/state", response_model=State, tags=["state"], summary="Полный снимок состояния")
+# ───────────────────────── state ─────────────────────────
+@app.get("/api/state", response_model=State, tags=["state"], summary="Full state snapshot")
 async def get_state():
     return await build_state()
 
 
-@app.get("/api/capabilities", tags=["state"], summary="Краткое описание возможностей для агентов")
+@app.get("/api/capabilities", tags=["state"], summary="Short capability description for agents")
 async def capabilities():
     return {
         "name": "spotineck",
-        "summary": "Синхронная мультирум-зона поверх одного Spotify Connect эндпоинта.",
+        "summary": "A synchronized multi-room zone on top of a single Spotify Connect endpoint.",
         "concepts": {
-            "speaker_group": "Колонки с selected=true играют синхронно одну зону. "
-            "Меняй состав через PUT /api/speakers/group или POST /api/speakers/{id}.",
-            "playback": "Источник — Spotify Connect (выбери 'spotineck' в приложении Spotify) "
-            "или локальная очередь OwnTone. Транспорт управляется через /api/playback/*.",
+            "speaker_group": "Speakers with selected=true play one zone in sync. "
+            "Change membership via PUT /api/speakers/group or POST /api/speakers/{id}.",
+            "playback": "The source is Spotify Connect (pick 'spotineck' in the Spotify app) "
+            "or OwnTone's local queue. Transport is controlled via /api/playback/*.",
         },
         "key_endpoints": {
             "snapshot": "GET /api/state",
@@ -246,14 +246,14 @@ async def capabilities():
             "toggle_speaker": "POST /api/speakers/{id} {selected:bool, volume?:0-100}",
             "set_group": "PUT /api/speakers/group {ids:[...]}",
             "search": "GET /api/search?q=...",
-            "device_name": "GET/POST /api/device-name {name} — имя в Spotify Connect",
-            "realtime": "WS /ws — пуш состояния при любом изменении",
+            "device_name": "GET/POST /api/device-name {name} — name in Spotify Connect",
+            "realtime": "WS /ws — state push on every change",
         },
         "openapi": "/openapi.json",
     }
 
 
-# ───────────────────────── воспроизведение ─────────────────────────
+# ───────────────────────── playback ─────────────────────────
 class VolumeBody(BaseModel):
     volume: int = Field(..., ge=0, le=100)
 
@@ -270,19 +270,19 @@ class RepeatBody(BaseModel):
     mode: str = Field("off", pattern="^(off|all|single)$")
 
 
-@app.post("/api/playback/play", tags=["playback"], summary="Старт/возобновление")
+@app.post("/api/playback/play", tags=["playback"], summary="Start/resume")
 async def play():
     await ot_put("/api/player/play")
     return {"ok": True}
 
 
-@app.post("/api/playback/pause", tags=["playback"], summary="Пауза")
+@app.post("/api/playback/pause", tags=["playback"], summary="Pause")
 async def pause():
     await ot_put("/api/player/pause")
     return {"ok": True}
 
 
-@app.post("/api/playback/toggle", tags=["playback"], summary="Play/Pause переключатель")
+@app.post("/api/playback/toggle", tags=["playback"], summary="Play/Pause toggle")
 async def toggle():
     player = await ot_get("/api/player")
     if player.get("state") == "play":
@@ -292,60 +292,60 @@ async def toggle():
     return {"ok": True}
 
 
-@app.post("/api/playback/next", tags=["playback"], summary="Следующий трек")
+@app.post("/api/playback/next", tags=["playback"], summary="Next track")
 async def next_track():
     await ot_put("/api/player/next")
     return {"ok": True}
 
 
-@app.post("/api/playback/previous", tags=["playback"], summary="Предыдущий трек")
+@app.post("/api/playback/previous", tags=["playback"], summary="Previous track")
 async def prev_track():
     await ot_put("/api/player/previous")
     return {"ok": True}
 
 
-@app.post("/api/playback/seek", tags=["playback"], summary="Перемотка к позиции")
+@app.post("/api/playback/seek", tags=["playback"], summary="Seek to position")
 async def seek(body: SeekBody):
     await ot_put("/api/player/seek", position_ms=body.position_ms)
     return {"ok": True}
 
 
-@app.post("/api/playback/volume", tags=["playback"], summary="Общая громкость зоны (0-100)")
+@app.post("/api/playback/volume", tags=["playback"], summary="Zone master volume (0-100)")
 async def volume(body: VolumeBody):
     await ot_put("/api/player/volume", volume=body.volume)
     return {"ok": True}
 
 
-@app.post("/api/playback/shuffle", tags=["playback"], summary="Перемешивание вкл/выкл")
+@app.post("/api/playback/shuffle", tags=["playback"], summary="Shuffle on/off")
 async def shuffle(body: ToggleBody):
     await ot_put("/api/player/shuffle", state=str(body.enabled).lower())
     return {"ok": True}
 
 
-@app.post("/api/playback/repeat", tags=["playback"], summary="Повтор: off|all|single")
+@app.post("/api/playback/repeat", tags=["playback"], summary="Repeat: off|all|single")
 async def repeat(body: RepeatBody):
     await ot_put("/api/player/repeat", state=body.mode)
     return {"ok": True}
 
 
-# ───────────────────────── колонки / группа ─────────────────────────
+# ───────────────────────── speakers / group ─────────────────────────
 class SpeakerBody(BaseModel):
-    selected: bool | None = Field(None, description="включить/выключить из синхронной группы")
+    selected: bool | None = Field(None, description="add/remove from the synchronized group")
     volume: int | None = Field(None, ge=0, le=100)
     offset_ms: int | None = Field(None, ge=-2000, le=2000,
-                                  description="компенсация задержки (минус = играть раньше, для ТВ)")
+                                  description="delay compensation (negative = play earlier, for TVs)")
 
 
 class GroupBody(BaseModel):
-    ids: list[str] = Field(..., description="итоговый состав синхронной группы")
+    ids: list[str] = Field(..., description="the resulting synchronized group membership")
 
 
-@app.get("/api/speakers", response_model=list[Speaker], tags=["speakers"], summary="Все колонки")
+@app.get("/api/speakers", response_model=list[Speaker], tags=["speakers"], summary="All speakers")
 async def speakers():
     return (await build_state()).speakers
 
 
-@app.post("/api/speakers/{speaker_id}", tags=["speakers"], summary="Тумблер/громкость колонки")
+@app.post("/api/speakers/{speaker_id}", tags=["speakers"], summary="Speaker toggle/volume")
 async def set_speaker(speaker_id: str, body: SpeakerBody):
     payload: dict[str, Any] = {}
     if body.selected is not None:
@@ -357,9 +357,9 @@ async def set_speaker(speaker_id: str, body: SpeakerBody):
         _offsets[speaker_id] = body.offset_ms
     await ot_put(f"/api/outputs/{speaker_id}", json_body=payload)
 
-    # Chromecast/AirPlay применяют offset только при (пере)старте сессии вывода.
-    # Если крутим задержку у уже играющего выхода — быстро пере-инициализируем его,
-    # иначе на слух ничего не меняется.
+    # Chromecast/AirPlay apply the offset only on (re)start of the output session.
+    # If we change the delay on an already-playing output — quickly re-initialize it,
+    # otherwise nothing changes audibly.
     if body.offset_ms is not None and body.selected is None:
         out = await ot_get(f"/api/outputs/{speaker_id}")
         if out.get("selected"):
@@ -370,18 +370,18 @@ async def set_speaker(speaker_id: str, body: SpeakerBody):
     return {"ok": True}
 
 
-@app.put("/api/speakers/group", tags=["speakers"], summary="Задать весь состав группы разом")
+@app.put("/api/speakers/group", tags=["speakers"], summary="Set the whole group membership at once")
 async def set_group(body: GroupBody):
     await ot_put("/api/outputs/set", json_body={"outputs": body.ids})
     return {"ok": True}
 
 
 class PinBody(BaseModel):
-    pin: str = Field(..., description="4-значный PIN, который колонка показывает при подключении")
+    pin: str = Field(..., description="the 4-digit PIN the speaker shows when connecting")
 
 
 @app.post("/api/speakers/{speaker_id}/verify", tags=["speakers"],
-          summary="Подтвердить AirPlay-колонку PIN-кодом (для needs_auth=true)")
+          summary="Verify an AirPlay speaker with a PIN (for needs_auth=true)")
 async def verify_speaker(speaker_id: str, body: PinBody):
     r = await http.post(f"/api/outputs/{speaker_id}/verification", json={"pin": body.pin})
     if r.status_code >= 400:
@@ -389,10 +389,10 @@ async def verify_speaker(speaker_id: str, body: PinBody):
     return {"ok": True}
 
 
-# ───────────────────────── имя устройства ─────────────────────────
+# ───────────────────────── device name ─────────────────────────
 class DeviceNameBody(BaseModel):
     name: str = Field(..., min_length=1, max_length=32,
-                      description="имя устройства в Spotify Connect")
+                      description="device name in Spotify Connect")
 
 
 def _read_device_name() -> str:
@@ -402,54 +402,54 @@ def _read_device_name() -> str:
         return "spotineck"
 
 
-@app.get("/api/device-name", tags=["settings"], summary="Текущее имя устройства в Spotify")
+@app.get("/api/device-name", tags=["settings"], summary="Current device name in Spotify")
 async def get_device_name():
     return {"name": _read_device_name()}
 
 
 @app.post("/api/device-name", tags=["settings"],
-          summary="Сменить имя устройства в Spotify (перезапускает librespot)")
+          summary="Change the device name in Spotify (restarts librespot)")
 async def set_device_name(body: DeviceNameBody):
     name = body.name.strip()
     if not name:
-        raise HTTPException(400, "пустое имя")
+        raise HTTPException(400, "empty name")
     try:
         with open(DEVICE_NAME_FILE, "w") as f:
             f.write(name)
     except Exception as e:
-        raise HTTPException(500, f"не удалось сохранить имя: {e}")
-    # перезапуск librespot, чтобы новое имя применилось (~3 сек недоступности Connect)
+        raise HTTPException(500, f"failed to save the name: {e}")
+    # restart librespot so the new name takes effect (~3 s of Connect downtime)
     try:
         import docker
         docker.from_env().containers.get(LIBRESPOT_CONTAINER).restart()
     except Exception as e:
         return JSONResponse(
             {"ok": False, "name": name,
-             "error": f"имя сохранено, но рестарт librespot не удался: {e}"},
+             "error": f"name saved, but restarting librespot failed: {e}"},
             status_code=500,
         )
     return {"ok": True, "name": name}
 
 
-# ───────────────────────── очередь / поиск / обложка ─────────────────────────
-@app.get("/api/queue", tags=["queue"], summary="Текущая очередь")
+# ───────────────────────── queue / search / artwork ─────────────────────────
+@app.get("/api/queue", tags=["queue"], summary="Current queue")
 async def queue():
     return await ot_get("/api/queue")
 
 
-@app.post("/api/queue/clear", tags=["queue"], summary="Очистить очередь")
+@app.post("/api/queue/clear", tags=["queue"], summary="Clear the queue")
 async def queue_clear():
     await ot_put("/api/queue/clear")
     return {"ok": True}
 
 
-@app.get("/api/search", tags=["library"], summary="Поиск по библиотеке (треки/альбомы/артисты/плейлисты)")
+@app.get("/api/search", tags=["library"], summary="Search the library (tracks/albums/artists/playlists)")
 async def search(q: str, types: str = "tracks,artists,albums,playlists"):
-    # OwnTone ищет по локальной библиотеке и Spotify (если выполнен вход в OwnTone)
+    # OwnTone searches the local library and Spotify (if logged in within OwnTone)
     return await ot_get("/api/search", type=types, query=q, media_kind="music")
 
 
-@app.get("/api/artwork", tags=["state"], summary="Обложка текущего трека (картинка)")
+@app.get("/api/artwork", tags=["state"], summary="Current track artwork (image)")
 async def artwork():
     try:
         player = await ot_get("/api/player")
@@ -471,7 +471,7 @@ async def ws_endpoint(ws: WebSocket):
     try:
         await ws.send_text(json.dumps({"type": "state", "data": (await build_state()).model_dump()}))
         while True:
-            await ws.receive_text()  # клиент может слать ping; нам важно держать соединение
+            await ws.receive_text()  # the client may send ping; we just keep the connection alive
     except WebSocketDisconnect:
         pass
     finally:
@@ -488,7 +488,7 @@ async def healthz():
 
 
 # ───────────────────────── web (SPA) ─────────────────────────
-# монтируется последним, чтобы не перехватывать /api/*
+# mounted last so it doesn't intercept /api/*
 app.mount("/", StaticFiles(directory="app/static", html=True), name="web")
 
 

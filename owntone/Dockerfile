@@ -1,8 +1,9 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# spotineck/owntone — OwnTone собранный из исходников последнего релиза.
-# Multi-stage: тяжёлый билд-стейдж выкидывается, в финал едут только бинарь +
-# рантайм-библиотеки. Поддержка AirPlay 2 (libplist/libsodium/libgcrypt),
-# Chromecast (--enable-chromecast), websockets, ALSA, pipe-источники.
+# spotineck/owntone — OwnTone built from the latest release sources.
+# Multi-stage: the heavy build stage is thrown away, only the binary +
+# runtime libraries make it into the final image. Support for AirPlay 2
+# (libplist/libsodium/libgcrypt), Chromecast (--enable-chromecast), websockets,
+# ALSA, pipe sources.
 # ─────────────────────────────────────────────────────────────────────────────
 FROM debian:bookworm-slim AS builder
 
@@ -50,8 +51,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && useradd -r -u 998 -d /var/cache/owntone owntone \
     && usermod -aG audio owntone
 
-# Только /usr (бинарь + либы + web-ассеты). /var и /etc из staging не нужны
-# (/var/run в базовом образе — симлинк, конфиг кладём свой ниже).
+# Only /usr (binary + libs + web assets). /var and /etc from staging aren't needed
+# (/var/run in the base image is a symlink, we drop our own config below).
 COPY --from=builder /staging/usr/ /usr/
 COPY owntone.conf /etc/owntone.conf
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
